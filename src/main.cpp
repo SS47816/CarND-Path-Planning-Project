@@ -29,6 +29,12 @@ int main() {
   // The max s value before wrapping around the track back to 0
   double max_s = 6945.554;
 
+  // start in lane 1
+  int lane = 1;
+
+  // have a reference velocity to target
+  double ref_vel = 49.5; //mph
+
   std::ifstream in_map_(map_file_.c_str(), std::ifstream::in);
 
   string line;
@@ -93,7 +99,61 @@ int main() {
 
           vector<double> next_x_vals;
           vector<double> next_y_vals;
+          
+          /**
+           * Start of modification
+           */
+          int prev_size = previous_path_x.size();
 
+          /**
+           * End of modification
+           */
+          
+          // Create a list of widely spaced (x, y) waypoints, evenly spaced at 30m
+          // Later we will interpolate these waypoints with a spline and fill it in with more points that control spline
+          vector<double> ptsx;
+          vector<double> ptsy;
+
+          // reference x, y, yaw states
+          // either we will reference the starting point as where the car is or at the previous paths end point
+          double ref_x = car_x;
+          double ref_y = car_y;
+          double ref_yaw = deg2rad(car_yaw);
+
+          // if previous size is almost empty, use the car as starting reference
+          if (prev_size < 2)
+          {
+            // Use two points that make the path tangent to the car
+            double prev_car_x = car_x - cos(car_yaw);
+            double prev_car_y = car_y - sin(car_yaw);
+
+            ptsx.push_back(prev_car_x);
+            ptsx.push_back(car_x);
+
+            ptsy.push_back(prev_car_y);
+            ptsy.push_back(car_y);
+          }
+          // else use the previous path's end point as starting reference
+          else
+          {
+            // Redefine reference state as previous path end point
+            ref_x = previous_path_x[prev_size - 1];
+            ref_y = previous_path_y[prev_size - 1];
+
+            double ref_x_prev = previous_path_x[prev_size - 2];
+            double ref_y_prev = previous_path_y[prev_size - 2];
+            ref_yaw = atan2((ref_y - ref_y_prev), (ref_x - ref_x_prev));
+
+            // Use two points that make the path tangent to the previous path's end state
+            ptsx.push_back(ref_x_prev);
+            ptsx.push_back(ref_x);
+
+            ptsy.push_back(ref_y_prev);
+            ptsy.push_back(ref_y);
+          }
+          
+          
+          
           /**
            * TODO: define a path made up of (x,y) points that the car will visit
            *   sequentially every .02 seconds
