@@ -94,9 +94,6 @@ int main() {
           // Sensor Fusion Data, a list of all other cars on the same side 
           //   of the road.
           auto sensor_fusion = j[1]["sensor_fusion"];
-
-          vector<double> next_x_vals;
-          vector<double> next_y_vals;
           
           /**
            * Start of modification
