@@ -33,7 +33,7 @@ int main() {
   int lane = 1;
 
   // have a reference velocity to target
-  double ref_vel = 49.5; //mph
+  double ref_vel = 0; //mph
 
   std::ifstream in_map_(map_file_.c_str(), std::ifstream::in);
 
@@ -124,18 +124,40 @@ int main() {
               double vy = sensor_fusion[i][4];
               double check_speed = sqrt(vx*vx + vy*vy);
               double check_car_s = sensor_fusion[i][5];
+
+              // if using previous points can project s value outards in time
+              check_car_s += ((double)prev_size*.02*check_speed);
+              // check s value greater than mine and s gap
+              if ((check_car_s > car_s) && ((check_car_s - car_s) < 30)) // within 30m
+              {
+                // Do some logic here, lower reference velocity as we don't crash into
+                // the car in front of us, could asl flag to try to change lanes
+                //ref_vel = 29.5; //mph
+                too_close = true;
+                if (lane > 0)
+                {
+                  lane = 0;
+                }
+              } 
             }
+          }
+
+          if (too_close)
+          {
+            ref_vel -= .224;
+          }
+          else if (ref_vel < 49.5)
+          {
+            ref_vel += .224;
           }
 
           /**
            * End of Sensor Fusion
            */
 
-
           /**
            * Smothen the path between way points
            */
-          int prev_size = previous_path_x.size();
           
           // Create a list of widely spaced (x, y) waypoints, evenly spaced at 30m
           // Later we will interpolate these waypoints with a spline and fill it in with more points that control spline
