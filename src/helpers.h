@@ -4,8 +4,10 @@
 #include <math.h>
 #include <string>
 #include <vector>
+#include "json.hpp"
 
 // for convenience
+using nlohmann::json;
 using std::string;
 using std::vector;
 
@@ -152,6 +154,66 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s,
   double y = seg_y + d*sin(perp_heading);
 
   return {x,y};
+}
+
+inline double getAbsSpeed(double vx, double vy) {
+  return sqrt(vx*vx + vy*vy);
+}
+
+// Calculate the neighbouring lane's speed 
+double getLaneSpeed(json lane_sensor_fusion) {
+  double sum = 0.0;
+  for (int i = 0; i < lane_sensor_fusion.size(); i++)
+  {
+    double vx = lane_sensor_fusion[i][3];
+    double vy = lane_sensor_fusion[i][4];
+    sum += getAbsSpeed(vx, vy);
+  }
+  return sum/double(lane_sensor_fusion.size());
+}
+
+// get heading in radians [-PI ~ PI]
+double getTheta(double vx, double vy, double speed) {
+  if (vy >= 0) 
+  {
+    return acos(vx/speed);
+  }
+  else 
+  {
+    return -1*acos(vx/speed);
+  }
+}
+
+// Predict the other car's motion in the next 3s
+bool safeToChangeLane(json lane_sensor_fusion, double car_s, double car_speed, 
+                                    const vector<double> &maps_x, 
+                                    const vector<double> &maps_y, double delta_t=3.0) {
+
+  double t = 3.0; // in s
+  double car_length = 4.0; // in m
+
+  // check time to collision for each car
+  for (int i = 0; i < lane_sensor_fusion.size(); i++)
+  {
+    double x = lane_sensor_fusion[i][1];
+    double y = lane_sensor_fusion[i][2];
+    double vx = lane_sensor_fusion[i][3];
+    double vy = lane_sensor_fusion[i][4];
+
+    double v = getAbsSpeed(vx, vy);
+    double theta = getTheta(vx, vy, v);
+    
+    vector<double> frenet = getFrenet(x, y, theta, maps_x, maps_y);
+    double distance = car_s - frenet[0]; // relative distance in s axis
+    double time_to_collision = (distance - car_length)/(v - car_speed);
+
+    if (time_to_collision <= t)
+    {
+      return false;
+    }
+  }
+  
+  return true;
 }
 
 #endif  // HELPERS_H
