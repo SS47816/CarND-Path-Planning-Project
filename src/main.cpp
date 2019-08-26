@@ -112,112 +112,45 @@ int main() {
           }
 
           bool too_close = false;
+          bool changing_lane = false;
 
-          // find ref_v to use
-          for (int i = 0; i < sensor_fusion.size(); i++)
+          json sensor_fusion_left;
+          json sensor_fusion_mid;
+          json sensor_fusion_right;
+
+          // classify the sensor_fusion data into neighbouring lanes
+          for(int i = 0; i < sensor_fusion.size(); i++)
           {
-            // car is in my lane
             float d = sensor_fusion[i][6];
-            if (d < (2 + 4*lane + 2) && d > (2 + 4*lane -2))
+            // in our left lane
+            if (d < (2 + 4*(lane - 1) + 2) && d > (2 + 4*(lane - 1) -2))
             {
+              sensor_fusion_left.push_back(sensor_fusion[i]);
+            }
+            // in our lane
+            else if (d < (2 + 4*lane + 2) && d > (2 + 4*lane -2))
+            {
+              sensor_fusion_mid.push_back(sensor_fusion[i]);
+              
               double vx = sensor_fusion[i][3];
               double vy = sensor_fusion[i][4];
               double check_speed = sqrt(vx*vx + vy*vy);
               double check_car_s = sensor_fusion[i][5];
-
               // if using previous points can project s value outards in time
               check_car_s += ((double)prev_size*.02*check_speed);
               // check s value greater than mine and s gap
               if ((check_car_s > car_s) && ((check_car_s - car_s) < 30)) // within 30m
               {
-                // Do some logic here, lower reference velocity as we don't crash into
-                // the car in front of us, could asl flag to try to change lanes
-                //ref_vel = 29.5; //mph
                 too_close = true;
-                /*if (lane > 0)
-                {
-                  lane = 0;
-                } */
-
-                bool safe_to_change_lane_left = false;
-                bool safe_to_change_lane_right = false;
-
-                double left_lane_speed = 22.3; // m/s (50mph)
-                double right_lane_speed = 22.3; // m/s (50mph)
-
-                json sensor_fusion_left;
-                json sensor_fusion_mid;
-                json sensor_fusion_right;
-
-                // classify the sensor_fusion data into neighbouring lanes
-                for(int i = 0; i < sensor_fusion.size(); i++)
-                {
-                  float d = sensor_fusion[i][6];
-                  // in our left lane
-                  if (d < (2 + 4*(lane - 1) + 2) && d > (2 + 4*(lane - 1) -2))
-                  {
-                    sensor_fusion_left.push_back(sensor_fusion[i]);
-                  }
-                  // in our lane
-                  else if (d < (2 + 4*lane + 2) && d > (2 + 4*lane -2))
-                  {
-                    sensor_fusion_mid.push_back(sensor_fusion[i]);
-                  }
-                  else if (d < (2 + 4*(lane + 1) + 2) && d > (2 + 4*(lane + 1) -2))
-                  {
-                    sensor_fusion_right.push_back(sensor_fusion[i]);
-                  }
-                }
-
-                /* Prepare Lane Change Left */
-                // if left lane exist
-                if (lane > 0)
-                {
-                  safe_to_change_lane_left = true; //safeToChangeLane(sensor_fusion_left, car_s, car_speed, map_waypoints_x, map_waypoints_y);
-                  // double left_lane_speed = getLaneSpeed(sensor_fusion_left);
-                  // if (left_lane_speed >= car_speed)
-                  // {
-                  //   safe_to_change_lane_left = safeToChangeLane(sensor_fusion_left, car_s, car_speed, map_waypoints_x, map_waypoints_y);
-                  // }
-                }
-
-                /* Prepare Lane Change Right */
-                // if right lane exist
-                if (lane < 2)
-                {
-                  safe_to_change_lane_right = true; //safeToChangeLane(sensor_fusion_right, car_s, car_speed, map_waypoints_x, map_waypoints_y);
-                  // double right_lane_speed = getLaneSpeed(sensor_fusion_right);
-                  // if (right_lane_speed >= car_speed)
-                  // {
-                  //   safe_to_change_lane_right = safeToChangeLane(sensor_fusion_right, car_s, car_speed, map_waypoints_x, map_waypoints_y);
-                  // }
-                }
-
-                /* Chosse which lane to change */
-                if (safe_to_change_lane_left && safe_to_change_lane_right)
-                {
-                  lane = lane + 1;
-                  // if (left_lane_speed >= right_lane_speed)
-                  // {
-                  //   lane = lane - 1;
-                  // }
-                  // else
-                  // {
-                  //   lane = lane + 1;
-                  // }
-                }
-                else if (safe_to_change_lane_left)
-                {
-                  lane = lane - 1;
-                }
-                else if (safe_to_change_lane_right)
-                {
-                  lane = lane + 1;
-                }
-              } 
+              }
+            }
+            else if (d < (2 + 4*(lane + 1) + 2) && d > (2 + 4*(lane + 1) -2))
+            {
+              sensor_fusion_right.push_back(sensor_fusion[i]);
             }
           }
 
+          // if too close to the front car, slow down, otherwise speed up
           if (too_close)
           {
             ref_vel -= .224*4;
@@ -226,6 +159,101 @@ int main() {
           {
             ref_vel += .224*4;
           }
+
+          // if too close to the front car, consider change lane
+          if (too_close)
+          {
+            bool safe_to_change_lane_left = false;
+            bool safe_to_change_lane_right = false;
+
+            double left_lane_speed = 22.3; // m/s (50mph)
+            double right_lane_speed = 22.3; // m/s (50mph)
+
+            double align = car_d;
+            while (align > 4.0)
+            {
+              align -= 4.0;
+            }
+            if (align <= 1.0 || align >= 3.0)
+            {
+              changing_lane = true;
+            }
+
+            /* Prepare Lane Change Left */
+            // if left lane exist
+            if (lane > 0 && !changing_lane)
+            {
+              safe_to_change_lane_left = true; //safeToChangeLane(sensor_fusion_left, car_s, car_speed, map_waypoints_x, map_waypoints_y);
+              // double left_lane_speed = getLaneSpeed(sensor_fusion_left);
+              // if (left_lane_speed >= car_speed)
+              // {
+              //   safe_to_change_lane_left = safeToChangeLane(sensor_fusion_left, car_s, car_speed, map_waypoints_x, map_waypoints_y);
+              // }
+            }
+
+            /* Prepare Lane Change Right */
+            // if right lane exist
+            if (lane < 2 && !changing_lane)
+            {
+              safe_to_change_lane_right = true; //safeToChangeLane(sensor_fusion_right, car_s, car_speed, map_waypoints_x, map_waypoints_y);
+              // double right_lane_speed = getLaneSpeed(sensor_fusion_right);
+              // if (right_lane_speed >= car_speed)
+              // {
+              //   safe_to_change_lane_right = safeToChangeLane(sensor_fusion_right, car_s, car_speed, map_waypoints_x, map_waypoints_y);
+              // }
+            }
+
+            /* Chosse which lane to change */
+            if (safe_to_change_lane_left && safe_to_change_lane_right)
+            {
+              lane = lane + 1;
+              // if (left_lane_speed >= right_lane_speed)
+              // {
+              //   lane = lane - 1;
+              // }
+              // else
+              // {
+              //   lane = lane + 1;
+              // }
+            }
+            else if (safe_to_change_lane_left)
+            {
+              lane = lane - 1;
+              changing_lane = true;
+            }
+            else if (safe_to_change_lane_right)
+            {
+              lane = lane + 1;
+              changing_lane = true;
+            }
+          }
+          
+          
+
+          // // find ref_v to use
+          // for (int i = 0; i < sensor_fusion.size(); i++)
+          // {
+          //   // car is in my lane
+          //   float d = sensor_fusion[i][6];
+          //   if (d < (2 + 4*lane + 2) && d > (2 + 4*lane -2))
+          //   {
+          //     double vx = sensor_fusion[i][3];
+          //     double vy = sensor_fusion[i][4];
+          //     double check_speed = sqrt(vx*vx + vy*vy);
+          //     double check_car_s = sensor_fusion[i][5];
+
+          //     // if using previous points can project s value outards in time
+          //     check_car_s += ((double)prev_size*.02*check_speed);
+          //     // check s value greater than mine and s gap
+          //     if ((check_car_s > car_s) && ((check_car_s - car_s) < 30)) // within 30m
+          //     {
+          //       // Do some logic here, lower reference velocity as we don't crash into
+          //       // the car in front of us, could asl flag to try to change lanes
+          //       //ref_vel = 29.5; //mph
+          //       too_close = true;
+          //     } 
+          //   }
+          // }
 
           /**
            * End of Sensor Fusion
