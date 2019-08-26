@@ -160,20 +160,50 @@ inline double getAbsSpeed(double vx, double vy) {
   return sqrt(vx*vx + vy*vy);
 }
 
-// Calculate the neighbouring lane's speed 
-double getLaneSpeed(json lane_sensor_fusion) {
+// Calculate the neighbouring lane's speed and number of cars
+vector<double> getLaneInfo(json lane_sensor_fusion) {
   double sum = 0.0;
-  for (int i = 0; i < lane_sensor_fusion.size(); i++)
+  double num_cars = double(lane_sensor_fusion.size());
+  vector<double> info;
+  if (num_cars > 0)
   {
-    double vx = lane_sensor_fusion[i][3];
-    double vy = lane_sensor_fusion[i][4];
-    sum += getAbsSpeed(vx, vy);
+    for (int i = 0; i < num_cars; i++)
+    {
+      double vx = lane_sensor_fusion[i][3];
+      double vy = lane_sensor_fusion[i][4];
+      sum += getAbsSpeed(vx, vy);
+    }
+    info.push_back(sum/num_cars);
+    info.push_back(num_cars);
   }
-  return sum/double(lane_sensor_fusion.size());
+  else
+  {
+    info.push_back(25.0); // m/s (50+mph)
+    info.push_back(0.0);
+  }
+
+  std::cout << "Lane Speed: " << info[0]*2.237 << std::endl;
+
+  return info;
+}
+
+// Compare two lane conditions with a cost function
+inline bool cmpLaneConditions(vector<double> left_lane, vector<double> right_lane) {
+  double left_score = left_lane[0] - right_lane[0] + right_lane[1] - left_lane[1];
+  if (left_score >= 0.0)
+  {
+    std::cout << "Pick Left" << std::endl;
+    return true;
+  }
+  else
+  {
+    std::cout << "Pick Right" << std::endl;
+    return false;
+  }
 }
 
 // get heading in radians [-PI ~ PI]
-double getTheta(double vx, double vy, double speed) {
+inline double getTheta(double vx, double vy, double speed) {
   if (vy >= 0) 
   {
     return acos(vx/speed);
@@ -189,9 +219,12 @@ bool safeToChangeLane(json lane_sensor_fusion, double car_s, double car_speed,
                                     const vector<double> &maps_x, 
                                     const vector<double> &maps_y, double delta_t=3.0) {
 
-  double t = 3.0; // in s
-  double car_length = 4.0; // in m
+  const double t = 3.0; // in s
+  const double car_length = 4.0; // in m
+  const double safety_distance = car_length + 5.0 + abs(22.3 - car_speed)*1.0; // in m
 
+  bool safe_to_change_lane = true;
+  
   // check time to collision for each car
   for (int i = 0; i < lane_sensor_fusion.size(); i++)
   {
@@ -204,16 +237,47 @@ bool safeToChangeLane(json lane_sensor_fusion, double car_s, double car_speed,
     double theta = getTheta(vx, vy, v);
     
     vector<double> frenet = getFrenet(x, y, theta, maps_x, maps_y);
-    double distance = car_s - frenet[0]; // relative distance in s axis
-    double time_to_collision = (distance - car_length)/(v - car_speed);
-
-    if (time_to_collision <= t)
+    double distance = frenet[0] - car_s; // relative distance in s axis wrt our car
+    double relative_speed = car_speed - v; // relative speed along the lane wrt their car
+    
+    // check if we are too close to other cars
+    if (abs(distance) <= safety_distance)
     {
       return false;
     }
+    
+    double time_to_collision;
+    if (distance >= 0)
+    {
+      time_to_collision = (distance - car_length)/relative_speed;
+    }
+    else
+    {
+      time_to_collision = (distance + car_length)/relative_speed;
+    }
+
+    std::cout << "Car ID: " << i << std::endl;
+    std::cout << "Relative Position: " << distance << std::endl;
+    std::cout << "Relative Speed: " << relative_speed << std::endl;
+    std::cout << "Time to Collision: " << time_to_collision << std::endl;
+    
+    // check if we will collide with them
+    if (time_to_collision >= 0 && time_to_collision <= t)
+    {
+      safe_to_change_lane = false;
+      std::cout << "Dangerous!" << std::endl;
+    }
+    else
+    {
+      std::cout << "Safe" << std::endl;
+    }
+    std::cout << std::endl;
   }
-  
-  return true;
+
+  std::cout << "~~ Safety Check Done ~~" << std::endl;
+  std::cout << std::endl;
+
+  return safe_to_change_lane;
 }
 
 #endif  // HELPERS_H
