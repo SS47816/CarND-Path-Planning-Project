@@ -166,9 +166,12 @@ int main() {
             bool safe_to_change_lane_left = false;
             bool safe_to_change_lane_right = false;
 
-            double left_lane_speed = 22.3; // m/s (50mph)
-            double right_lane_speed = 22.3; // m/s (50mph)
+            vector<double> left_lane_info;
+            vector<double> right_lane_info;
 
+            double car_speed_in_mps = car_speed/2.237;
+            const double is_faster = 2.0;
+            
             double align = car_d;
             while (align > 4.0)
             {
@@ -183,38 +186,38 @@ int main() {
             // if left lane exist
             if (lane > 0 && !changing_lane)
             {
-              safe_to_change_lane_left = true; //safeToChangeLane(sensor_fusion_left, car_s, car_speed, map_waypoints_x, map_waypoints_y);
-              // double left_lane_speed = getLaneSpeed(sensor_fusion_left);
-              // if (left_lane_speed >= car_speed)
-              // {
-              //   safe_to_change_lane_left = safeToChangeLane(sensor_fusion_left, car_s, car_speed, map_waypoints_x, map_waypoints_y);
-              // }
+              std::cout << "Considering Lane Change Left" << std::endl;
+              left_lane_info = getLaneInfo(sensor_fusion_left);
+              if (left_lane_info[0] - car_speed_in_mps >= is_faster)
+              {
+                safe_to_change_lane_left = safeToChangeLane(sensor_fusion_left, car_s, car_speed_in_mps, map_waypoints_x, map_waypoints_y);
+              }
             }
 
             /* Prepare Lane Change Right */
             // if right lane exist
             if (lane < 2 && !changing_lane)
             {
-              safe_to_change_lane_right = true; //safeToChangeLane(sensor_fusion_right, car_s, car_speed, map_waypoints_x, map_waypoints_y);
-              // double right_lane_speed = getLaneSpeed(sensor_fusion_right);
-              // if (right_lane_speed >= car_speed)
-              // {
-              //   safe_to_change_lane_right = safeToChangeLane(sensor_fusion_right, car_s, car_speed, map_waypoints_x, map_waypoints_y);
-              // }
+              std::cout << "Considering Lane Change Right" << std::endl;
+              right_lane_info = getLaneInfo(sensor_fusion_right);
+              if (right_lane_info[0] - car_speed_in_mps >= is_faster)
+              {
+                safe_to_change_lane_right = safeToChangeLane(sensor_fusion_right, car_s, car_speed_in_mps, map_waypoints_x, map_waypoints_y);
+              }
             }
 
             /* Chosse which lane to change */
             if (safe_to_change_lane_left && safe_to_change_lane_right)
             {
-              lane = lane + 1;
-              // if (left_lane_speed >= right_lane_speed)
-              // {
-              //   lane = lane - 1;
-              // }
-              // else
-              // {
-              //   lane = lane + 1;
-              // }
+              bool choose_left = cmpLaneConditions(left_lane_info, right_lane_info);
+              if (choose_left)
+              {
+                lane = lane - 1;
+              }
+              else
+              {
+                lane = lane + 1;
+              }
             }
             else if (safe_to_change_lane_left)
             {
